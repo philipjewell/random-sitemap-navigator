@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sitemap Random Navigator</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 2rem;
+      background: #f9f9f9;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 0.5rem;
+      font-size: 1rem;
+    }
+    button {
+      margin-top: 0.5rem;
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+    }
+    .recent-urls {
+      margin-top: 2rem;
+    }
+    .recent-url-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0.25rem 0;
+    }
+    .recent-url-item a {
+      color: #007BFF;
+      text-decoration: none;
+      flex-grow: 1;
+    }
+    .recent-url-item a:hover {
+      text-decoration: underline;
+    }
+    .delete-btn {
+      margin-left: 1rem;
+      background: none;
+      border: none;
+      color: #d00;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Sitemap Random Navigator</h1>
+  <input type="text" id="sitemap-url" placeholder="Enter sitemap.xml URL" />
+  <button onclick="addSitemapUrl()">Submit</button>
+
+  <div class="recent-urls" id="recent-urls"></div>
+
+  <script>
+    const sitemapCacheKey = 'sitemapUrls';
+    const sitemapDataKeyPrefix = 'sitemapData:';
+
+    document.getElementById('sitemap-url').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        addSitemapUrl();
+      }
+    });
+
+    function loadRecentUrls() {
+      const urls = JSON.parse(localStorage.getItem(sitemapCacheKey)) || [];
+      const container = document.getElementById('recent-urls');
+      container.innerHTML = '<h2>Recent Sitemaps</h2>';
+
+      urls.forEach(url => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'recent-url-item';
+
+        const a = document.createElement('a');
+        a.href = '#';
+        a.textContent = url;
+        a.onclick = () => {
+          const cached = localStorage.getItem(sitemapDataKeyPrefix + url);
+          if (cached) {
+            const locs = JSON.parse(cached);
+            if (locs.length > 0) {
+              const randomIndex = Math.floor(Math.random() * locs.length);
+              window.open(locs[randomIndex], '_blank');
+            } else {
+              alert('No URLs found in cached sitemap.');
+            }
+          } else {
+            alert('Sitemap not cached. Please re-submit the sitemap URL.');
+          }
+        };
+
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '🗑️';
+        delBtn.className = 'delete-btn';
+        delBtn.onclick = () => removeSitemapUrl(url);
+
+        wrapper.appendChild(a);
+        wrapper.appendChild(delBtn);
+        container.appendChild(wrapper);
+      });
+    }
+
+    async function addSitemapUrl() {
+      const input = document.getElementById('sitemap-url');
+      const url = input.value.trim();
+      if (!url) return;
+
+      try {
+        const proxyUrl = 'https://api.allorigins.win/raw?url=';
+        const response = await fetch(proxyUrl + encodeURIComponent(url));
+        const xmlText = await response.text();
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlText, "application/xml");
+
+        // Handle nested sitemap indexes as well as plain url sets
+        let locElements = Array.from(xmlDoc.getElementsByTagName('loc'));
+        const locs = locElements.map(loc => loc.textContent.trim()).filter(Boolean);
+
+        if (locs.length > 0) {
+          localStorage.setItem(sitemapDataKeyPrefix + url, JSON.stringify(locs));
+
+          let urls = JSON.parse(localStorage.getItem(sitemapCacheKey)) || [];
+          if (!urls.includes(url)) {
+            urls.unshift(url);
+            if (urls.length > 10) urls.pop();
+            localStorage.setItem(sitemapCacheKey, JSON.stringify(urls));
+          }
+
+          input.value = '';
+          loadRecentUrls();
+        } else {
+          alert('No URLs found in sitemap.');
+        }
+      } catch (error) {
+        alert('Failed to fetch sitemap: ' + error);
+      }
+    }
+
+    function removeSitemapUrl(urlToRemove) {
+      let urls = JSON.parse(localStorage.getItem(sitemapCacheKey)) || [];
+      urls = urls.filter(url => url !== urlToRemove);
+      localStorage.setItem(sitemapCacheKey, JSON.stringify(urls));
+      localStorage.removeItem(sitemapDataKeyPrefix + urlToRemove);
+      loadRecentUrls();
+    }
+
+    loadRecentUrls();
+  </script>
+</body>
+</html>
